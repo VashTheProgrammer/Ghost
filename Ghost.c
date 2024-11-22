@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include <string.h>
+#include "iot_config.h"
+#include "command_sequence.h"
+#include "state_machine.h"
+#include "load_config.h"
 
 #define UART0_TX_PIN 0
 #define UART0_RX_PIN 1
@@ -11,32 +14,18 @@
 #define BAUD_RATE 115200
 #define COMMAND_INTERVAL_MS 10000  // Intervallo di tempo tra i comandi AT
 
-typedef enum {
-    STATE_WAIT_BEFORE_START,
-    STATE_SEND_AT_RST,
-    STATE_WAIT_AFTER_RST,
-    STATE_SEND_AT_GMR,
-    STATE_SEND_AT_CWMODE,
-    STATE_SEND_AT_CONNECT_WIFI,
-    STATE_COMPLETE,
-    STATE_IDLE
-} at_command_state_t;
-
-typedef struct {
-    at_command_state_t state;
-    const char *command;
-    const char *message;
-    at_command_state_t next_state;
-} at_command_t;
-
-at_command_t at_command_sequence[] = {
-    {STATE_SEND_AT_GMR, "AT+GMR\r\n", "Inviando AT+GMR alla UART1", STATE_SEND_AT_CWMODE},
-    {STATE_SEND_AT_CWMODE, "AT+CWMODE=1\r\n", "Inviando AT+CWMODE=1 alla UART1", STATE_SEND_AT_CONNECT_WIFI},
-    {STATE_SEND_AT_CONNECT_WIFI, "AT+CWJAP=\"Vashphone\",\"pippopluto69aba\"\r\n", "Inviando AT+CWJAP=\"SSID\",\"PASSWORD\" alla UART1", STATE_COMPLETE},
-    {STATE_COMPLETE, NULL, "Configurazione completata.", STATE_IDLE}
-};
-
 int main() {
+    // Inizializza i parametri di configurazione
+    iot_config_t config;
+    
+    if (!load_config_from_defines(&config)) {
+        printf("Errore durante il caricamento della configurazione\n");
+        return 1;
+    }
+
+    // Aggiorna i comandi con i parametri configurati
+    update_command_sequence(&config);
+
     // Inizializza la configurazione della UART
     stdio_init_all();
     
@@ -72,59 +61,8 @@ int main() {
             led_time = make_timeout_time_ms(500);
         }
 
-        // Macchina a stati per l'invio di comandi AT
-        switch (state) {
-            case STATE_WAIT_BEFORE_START:
-                // Attendi 2 secondi prima di iniziare
-                if (absolute_time_diff_us(get_absolute_time(), command_time) <= 0) {
-                    state = STATE_SEND_AT_RST;
-                    command_time = make_timeout_time_ms(5000);  // Attesa di 5 secondi dopo il reset
-                }
-                break;
-
-            case STATE_SEND_AT_RST:
-                if (uart_is_writable(uart1)) {
-                    printf("Inviando AT+RST alla UART1\n");
-                    uart_puts(uart1, "AT+RST\r\n");
-                    state = STATE_WAIT_AFTER_RST;
-                }
-                break;
-
-            case STATE_WAIT_AFTER_RST:
-                // Attendi 5 secondi dopo il comando di reset
-                if (absolute_time_diff_us(get_absolute_time(), command_time) <= 0) {
-                    state = STATE_SEND_AT_GMR;
-                    command_time = make_timeout_time_ms(COMMAND_INTERVAL_MS);
-                }
-                break;
-
-            default:
-                for (int i = 0; i < sizeof(at_command_sequence) / sizeof(at_command_t); i++) {
-                    if (at_command_sequence[i].state == state) {
-                        // Attendi fino a quando non è il momento di inviare il prossimo comando
-                        if (absolute_time_diff_us(get_absolute_time(), command_time) <= 0) {
-                            if (uart_is_writable(uart1)) {
-                                if (at_command_sequence[i].command != NULL) {
-                                    at_command_counter++;
-                                    // Stampa su UART0 che stai inviando il comando e il numero di richieste
-                                    printf("%s, richiesta numero: %d\n", at_command_sequence[i].message, at_command_counter);
-                                    uart_puts(uart1, at_command_sequence[i].command);
-                                } else {
-                                    printf("%s\n", at_command_sequence[i].message);
-                                }
-                                state = at_command_sequence[i].next_state;
-                                command_time = make_timeout_time_ms(COMMAND_INTERVAL_MS);
-                            }
-                        }
-                        break;
-                    }
-                }
-                break;
-
-            case STATE_IDLE:
-                // Macchina a stati ferma, non fa nulla
-                break;
-        }
+        // Gestisci la macchina a stati
+        state_machine(&state, &command_time, &led_time, &at_command_counter);
 
         // Se c'è un dato disponibile sulla UART0 (PC), invialo alla UART1 (ESP32)
         if (uart_is_readable(uart0)) {

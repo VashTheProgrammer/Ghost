@@ -13,3 +13,4 @@ _deps
 *.json
 /build
 pico_sdk_import.cmake
+/config
