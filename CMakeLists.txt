@@ -39,15 +39,23 @@ add_executable(Ghost
     ghost.c 
     command_sequence.c
     state_machine.c
-    load_config.c
     sas_token_generator.c
+    config/A_configuration.c
+    src/az_precondition.c
+    src/az_iot_hub_client.c
+    src/az_iot_hub_client_sas.c
+    src/az_iot_hub_client_properties.c
+    src/az_iot_common.c
+    src/az_context.c
+    src/az_span.c
+    src/az_base64.c
     )
 
 # Includi il file header generato nel progetto
 target_include_directories(Ghost PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/config
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 pico_set_program_name(Ghost "Ghost")
@@ -61,11 +69,6 @@ pico_enable_stdio_usb(Ghost 0)
 target_link_libraries(Ghost
         pico_stdlib 
         pico_multicore)
-
-# Add the standard include files to the build
-target_include_directories(Ghost PRIVATE
-  ${CMAKE_CURRENT_LIST_DIR}
-)
 
 pico_add_extra_outputs(Ghost)
 

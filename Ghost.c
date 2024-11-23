@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "iot_config.h"
 #include "command_sequence.h"
 #include "state_machine.h"
-#include "load_config.h"
+#include "config.h"
+
+#include "az_iot.h"
+#include "az_iot_hub_client.h"
 
 #define UART0_TX_PIN 0
 #define UART0_RX_PIN 1
@@ -15,16 +17,6 @@
 #define COMMAND_INTERVAL_MS 10000  // Intervallo di tempo tra i comandi AT
 
 int main() {
-    // Inizializza i parametri di configurazione
-    iot_config_t config;
-    
-    if (!load_config_from_defines(&config)) {
-        printf("Errore durante il caricamento della configurazione\n");
-        return 1;
-    }
-
-    // Aggiorna i comandi con i parametri configurati
-    update_command_sequence(&config);
 
     // Inizializza la configurazione della UART
     stdio_init_all();
@@ -39,6 +31,8 @@ int main() {
     gpio_set_function(UART1_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART1_RX_PIN, GPIO_FUNC_UART);
 
+    printf("\n\n");
+
     // Inizializza il pin del LED
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -48,6 +42,34 @@ int main() {
     bool led_on = false;
     absolute_time_t command_time = make_timeout_time_ms(2000);  // Prima attesa di 2 secondi
     int at_command_counter = 0;
+
+    // Aggiorna i comandi con i parametri configurati
+    update_command_sequence(&iot_config);
+
+    // UN PO DI MERDA PER TE
+    // -----------------------------------------------------------------------------
+
+    char *iot_hub_hostname = "your-iothub.azure-devices.net";
+    char *device_id = "your-device-id";
+    char *device_key = "your-device-key";
+
+    az_iot_hub_client hub_client;
+    az_iot_hub_client_options options = az_iot_hub_client_options_default();
+    az_result result = az_iot_hub_client_init(
+      &hub_client,
+      az_span_create_from_str(iot_hub_hostname),
+      az_span_create_from_str(device_id),
+      &options);
+
+    if (result != AZ_OK) {
+        printf("Errore nella configurazione del client IoT Hub\n");
+    } 
+    else {
+        printf("Client IoT Hub configurato correttamente\n");
+    }
+
+    // -----------------------------------------------------------
+
 
     // Stato della macchina a stati
     at_command_state_t state = STATE_WAIT_BEFORE_START;

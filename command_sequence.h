@@ -1,7 +1,7 @@
 #ifndef COMMAND_SEQUENCE_H
 #define COMMAND_SEQUENCE_H
 
-#include "iot_config.h"
+#include "config.h"
 
 typedef enum {
     STATE_WAIT_BEFORE_START,
@@ -19,12 +19,12 @@ typedef enum {
 
 typedef struct {
     at_command_state_t state;
-    char command[2048];
+    char command[256];
     const char *message;
     at_command_state_t next_state;
 } at_command_t;
 
 extern at_command_t at_command_sequence[];
-void update_command_sequence(iot_config_t *config);
+bool update_command_sequence(iot_config_t *config);
 
 #endif // COMMAND_SEQUENCE_H
